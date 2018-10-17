@@ -13,10 +13,8 @@ const knex = require('../knex');
 
 // Get All (and search by query)
 router.get('/', (req, res, next) => {
-  const {
-    searchTerm
-  } = req.query;
-
+  const {searchTerm} = req.query;
+  const {folderId} = req.query;
   // notes.filter(searchTerm)
   //   .then(list => {
   //     res.json(list);
@@ -24,32 +22,37 @@ router.get('/', (req, res, next) => {
   //   .catch(err => {
   //     next(err);
   //   });
-  knex.select('id', 'title', 'content')
+  knex.select('notes.id', 'title', 'content', 'folders.id as folderId', 'folders.name as folderName')
     .from('notes')
+    .leftJoin('folders', 'notes.folder_id', 'folders.id')
     .modify(function (queryBuilder) {
       if (searchTerm) {
         queryBuilder.where('title', 'like', `%${searchTerm}%`);
+      }
+    })
+    .modify(function (queryBuilder) {
+      if (folderId) {
+        queryBuilder.where('folder_id', folderId);
       }
     })
     .orderBy('notes.id')
     .then(results => {
       res.json(results);
     })
-    .catch(err => {
-      next(err);
-    });
+    .catch(err => next(err));
 });
 
 // Get a single item
 router.get('/:id', (req, res, next) => {
   const id = req.params.id;
 
-  knex('notes')
-    .returning(['id', 'title', 'content'])
-    .where('id', id)
+  knex.select('notes.id', 'title', 'content', 'folders.id as folderId', 'folders.name as folderName')
+    .from('notes')
+    .leftJoin('folders','notes.folder_id','folders.id')
+    .where('notes.id', id)
     .then(results => {
-      if(results[0]){
-        res.json(results[0])
+      if (results) {
+        res.json(results);
       } else {
         next();
       }
@@ -76,7 +79,7 @@ router.put('/:id', (req, res, next) => {
 
   /***** Never trust users - validate input *****/
   const updateObj = {};
-  const updateableFields = ['title', 'content'];
+  const updateableFields = ['title', 'content', 'folder_id'];
 
   updateableFields.forEach(field => {
     if (field in req.body) {
@@ -91,14 +94,15 @@ router.put('/:id', (req, res, next) => {
     return next(err);
   }
 
-  knex('notes')
-    .returning(['id', 'title', 'content'])
-    .where('id', id)
+  knex.select('notes.id','title','content','folder_id as folderId','folders.name as folderName')
+    .from('notes')
+    .leftJoin('folders','notes.folder_id','folders.id')
+    .where('notes.id', id)
     .update(updateObj)
-    .then(results =>{
-      if(results[0]){
-        res.json(results[0]);
-      } else{
+    .then(results => {
+      if (results) {
+        res.json(results);
+      } else {
         next();
       }
     })
@@ -120,29 +124,32 @@ router.put('/:id', (req, res, next) => {
 
 // Post (insert) an item
 router.post('/', (req, res, next) => {
-  const {
-    title,
-    content
-  } = req.body;
+  const {title,content, folderId} = req.body;
 
-  const newItem = {
-    title,
-    content
-  };
+  const newItem = {title: title, content: content, folder_id: folderId};
   /***** Never trust users - validate input *****/
   if (!newItem.title) {
     const err = new Error('Missing `title` in request body');
     err.status = 400;
     return next(err);
   }
-
-  knex('notes')
-    .returning(['id', 'title', 'content'])
-    .insert(newItem)
-    .then(results => res.location(`http://${req.headers.host}/notes/${results.id}`).status(201).json(results[0]))
-    .catch(err => {
-      next(err);
-    });
+  let noteId;
+  // Insert new note, instead of returning all the fields, just return the new `id`
+  knex.insert(newItem)
+    .into('notes')
+    .returning('id')
+    .then(([id]) => {
+      noteId = id;
+      // Using the new id, select the new note and the folder
+      return knex.select('notes.id', 'title', 'content', 'folder_id as folderId', 'folders.name as folderName')
+        .from('notes')
+        .leftJoin('folders', 'notes.folder_id', 'folders.id')
+        .where('notes.id', noteId);
+    })
+    .then(([result]) => {
+      res.location(`${req.originalUrl}/${result.id}`).status(201).json(result);
+    })
+    .catch(err => next(err));
   // notes.create(newItem)
   //   .then(item => {
   //     if (item) {
