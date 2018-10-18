@@ -147,8 +147,8 @@ router.post('/', (req, res, next) => {
 
 /* ========== PUT/UPDATE A SINGLE ITEM ========== */
 router.put('/:id', (req, res, next) => {
-  const noteId = req.params.id;
-  const { title, content, folderId } = req.body;
+  let noteId = req.params.id;
+  const { title, content, folderId, tags } = req.body;
 
   /***** Never trust users. Validate input *****/
   if (!title) {
@@ -163,27 +163,52 @@ router.put('/:id', (req, res, next) => {
     folder_id: folderId ? folderId : null
   };
 
+  //Update new note into notes table
   knex('notes')
     .update(updateItem)
     .where('id', noteId)
-    .returning(['id'])
+    .returning('id')
+    .then(([id]) => {
+      //Delete current related tags from notes_tags table
+      // const deleteTags = tags.map(tagId => ({
+      //   note_id: noteId,
+      //   tag_id: tagId
+      // }));
+      //return deleteTags;
+      return knex('notes_tags')
+        .where('note_id', id)
+        .del();
+    })
+    // Insert related tags into notes_tags table
     .then(() => {
-      // Using the noteId, select the note and the folder info
+      const tagsInsert = tags.map(tagId => ({
+        note_id: noteId,
+        tag_id: tagId
+      }));
+      return knex.insert(tagsInsert).into('notes_tags');
+    })
+    .then(() => {
+      // Select the new note and leftJoin on folders and tags
       return knex
         .select(
           'notes.id',
           'title',
           'content',
           'folder_id as folderId',
-          'folders.name as folderName'
+          'folders.name as folderName',
+          'tags.id as tagId',
+          'tags.name as TagName'
         )
         .from('notes')
         .leftJoin('folders', 'notes.folder_id', 'folders.id')
+        .leftJoin('notes_tags', 'notes.id', 'notes_tags.note_id')
+        .leftJoin('tags', 'tags.id', 'notes_tags.tag_id')
         .where('notes.id', noteId);
     })
-    .then(([result]) => {
+    .then(result => {
       if (result) {
-        res.json(result);
+        const hydrated = hydrateNotes(result)[0];
+        res.json(hydrated);
       } else {
         next();
       }
