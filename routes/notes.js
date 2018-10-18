@@ -70,9 +70,10 @@ router.get('/:id', (req, res, next) => {
     .leftJoin('tags', 'notes_tags.tag_id', 'tags.id')
     .where('notes.id', noteId)
     .then(result => {
-      console.log(result);
+      //console.log(result);
       if (result) {
-        const hydrated = hydrateNotes(result);
+        console.log(`${JSON.stringify(result, null, 2)}`);
+        const hydrated = hydrateNotes(result)[0];
         res.json(hydrated);
       } else {
         next();
