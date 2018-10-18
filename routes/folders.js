@@ -2,25 +2,29 @@
 
 const express = require('express');
 const router = express.Router();
+
 const knex = require('../knex');
 
+/* ========== GET/READ ALL TAGS ========== */
 router.get('/', (req, res, next) => {
   knex.select('id', 'name')
     .from('folders')
     .then(results => {
       res.json(results);
     })
-    .catch(err => next(err));
+    .catch(err => {
+      next(err);
+    });
 });
 
+/* ========== GET/READ SINGLE TAGS ========== */
 router.get('/:id', (req, res, next) => {
-  const id = req.params.id;
-  knex('folders')
-    .returning(['id', 'name'])
-    .where('id', id)
-    .then(results => {
-      if (results[0]) {
-        res.json(results[0]);
+  knex.first('id', 'name')
+    .where('id', req.params.id)
+    .from('folders')
+    .then(result => {
+      if (result) {
+        res.json(result);
       } else {
         next();
       }
@@ -30,32 +34,52 @@ router.get('/:id', (req, res, next) => {
     });
 });
 
-router.put('/:id', (req, res, next) => {
-  const id = req.params.id;
+/* ========== POST/CREATE ITEM ========== */
+router.post('/', (req, res, next) => {
+  const { name } = req.body;
 
-  const updateObj = {};
-  const updateableFields = ['name'];
-
-  updateableFields.forEach(field => {
-    if (field in req.body) {
-      updateObj[field] = req.body[field];
-    }
-  });
-
-  if (!updateObj.name) {
+  /***** Never trust users. Validate input *****/
+  if (!name) {
     const err = new Error('Missing `name` in request body');
     err.status = 400;
     return next(err);
   }
 
+  const newItem = { name };
+
+  knex.insert(newItem)
+    .into('folders')
+    .returning(['id', 'name'])
+    .then((results) => {
+      const result = results[0];
+      res.location(`${req.originalUrl}/${result.id}`).status(201).json(result);
+    })
+    .catch(err => {
+      next(err);
+    });
+});
+
+/* ========== PUT/UPDATE A SINGLE ITEM ========== */
+router.put('/:id', (req, res, next) => {
+  const { name } = req.body;
+
+  /***** Never trust users. Validate input *****/
+  if (!name) {
+    const err = new Error('Missing `name` in request body');
+    err.status = 400;
+    return next(err);
+  }
+
+  const updateItem = { name };
+
   knex('folders')
-    .returning(['id','name'])
-    .where('id', id)
-    .update(updateObj)
-    .then(results =>{
-      if(results[0]){
-        res.json(results[0]);
-      } else{
+    .update(updateItem)
+    .where('id', req.params.id)
+    .returning(['id', 'name'])
+    .then(([result]) => {
+      if (result) {
+        res.json(result);
+      } else {
         next();
       }
     })
@@ -64,37 +88,17 @@ router.put('/:id', (req, res, next) => {
     });
 });
 
-// Post (insert) an item
-router.post('/', (req, res, next) => {
-  const {name} = req.body;
-
-  const newItem = {name};
-
-  if (!newItem.name) {
-    const err = new Error('Missing `name` in request body');
-    err.status = 400;
-    return next(err);
-  }
-
-  knex('folders')
-    .returning(['id', 'name'])
-    .insert(newItem)
-    .then(results => res.location(`http://${req.headers.host}/notes/${results.id}`).status(201).json(results[0]))
-    .catch(err => {
-      next(err);
-    });
-});
-
-// Delete an item
+/* ========== DELETE/REMOVE A SINGLE ITEM ========== */
 router.delete('/:id', (req, res, next) => {
-  const id = req.params.id;
-  knex('folders')
-    .where('id', id)
-    .del()
-    .then(res.sendStatus(204))
+  knex.del()
+    .where('id', req.params.id)
+    .from('folders')
+    .then(() => {
+      res.status(204).end();
+    })
     .catch(err => {
       next(err);
     });
-
 });
+
 module.exports = router;
