@@ -71,7 +71,7 @@ router.get('/:id', (req, res, next) => {
     .where('notes.id', noteId)
     .then(result => {
       //console.log(result);
-      if (result) {
+      if (result && result.length > 0) {
         console.log(`${JSON.stringify(result, null, 2)}`);
         const hydrated = hydrateNotes(result)[0];
         res.json(hydrated);
@@ -176,9 +176,13 @@ router.put('/:id', (req, res, next) => {
       //   tag_id: tagId
       // }));
       //return deleteTags;
-      return knex('notes_tags')
-        .where('note_id', id)
-        .del();
+      if (id) {
+        return knex('notes_tags')
+          .where('note_id', id)
+          .del();
+      } else {
+        next();
+      }
     })
     // Insert related tags into notes_tags table
     .then(() => {
