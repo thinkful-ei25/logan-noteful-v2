@@ -2,7 +2,7 @@
 const app = require('../server');
 const chai = require('chai');
 const chaiHttp = require('chai-http');
-
+const knex = require('../knex');
 const expect = chai.expect;
 
 chai.use(chaiHttp);
