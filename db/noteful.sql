@@ -1,4 +1,5 @@
 -- psql -U dev -d noteful-app -f C:\Users\Bear\projects\noteful-app-v2\db\noteful.sql
+-- heroku integration
 DROP TABLE IF EXISTS notes_tags;
 DROP TABLE IF EXISTS notes;
 DROP TABLE IF EXISTS folders;
